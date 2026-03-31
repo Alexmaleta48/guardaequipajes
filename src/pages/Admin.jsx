@@ -326,6 +326,8 @@ function Admin() {
   const totalCash = todaysHistory.filter(h => h.paymentMethod === 'cash').reduce((sum, item) => sum + item.totalPaid, 0);
   const totalCard = todaysHistory.filter(h => h.paymentMethod === 'card').reduce((sum, item) => sum + item.totalPaid, 0);
 
+  const pendingRevenue = inventory.reduce((sum, item) => sum + calculatePrice(item).totalPrice, 0);
+
   return (
     <div className="app-container" style={{maxWidth: '1400px'}}>
       <Toaster position="top-center" />
@@ -381,9 +383,12 @@ function Admin() {
             <button onClick={() => setHistoryModal(true)} style={{background: isDark ? '#064e3b' : 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #10b981', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold', color: isDark ? 'white' : '#065f46'}}>Ver Historial</button>
           </div>
           <div className="stat-value" style={{color: isDark ? '#10b981' : '#065f46'}}>{totalRevenue.toFixed(2)} €</div>
-          <div className="stat-trend" style={{ fontSize: '0.9rem', color: isDark ? '#34d399' : '#065f46', fontWeight: 600, display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-            <span>💵 Metálico: {totalCash.toFixed(2)}€</span>
-            <span>💳 TPV: {totalCard.toFixed(2)}€</span>
+          <div className="stat-trend" style={{ fontSize: '0.9rem', color: isDark ? '#34d399' : '#065f46', fontWeight: 600, display: 'flex', flexDirection: 'column', marginTop: '0.5rem', gap: '0.2rem' }}>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>💵 Metálico: {totalCash.toFixed(2)}€</span><span>💳 TPV: {totalCard.toFixed(2)}€</span></div>
+            <div style={{borderTop: `1px solid ${isDark ? '#064e3b' : '#34d399'}`, paddingTop: '0.4rem', marginTop: '0.4rem', display: 'flex', justifyContent: 'space-between', opacity: 0.9}}>
+               <span>⏳ Previsión Pendiente Mostrar:</span>
+               <span style={{fontWeight: 800}}>+{pendingRevenue.toFixed(2)}€</span>
+            </div>
           </div>
         </div>
         <div className="stat-card">
@@ -526,11 +531,12 @@ function Admin() {
                        return (
                          <button key={num} onClick={() => setCheckoutModal(isOccupied)} 
                                  title={`${isOccupied.clientName} - ${isOccupied.smallBags + isOccupied.largeBags} bultos`}
-                                 style={{ background: bg, color: 'white', border: 'none', borderRadius: '8px', height: '75px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition:'transform 0.1s' }}
+                                 style={{ position: 'relative', background: bg, color: 'white', border: 'none', borderRadius: '8px', height: '75px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition:'transform 0.1s' }}
                                  onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
                                  onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
                             <span style={{ fontSize: '1.4rem'}}>{num}</span>
                             <span style={{fontSize: '0.7rem', opacity: 0.9, marginTop:'2px' }}>{isOccupied.smallBags + isOccupied.largeBags} bts</span>
+                            {isOccupied.photoData && <Camera size={14} style={{position:'absolute', top:'6px', right:'6px', opacity: 0.9}} />}
                          </button>
                        )
                     } else {
