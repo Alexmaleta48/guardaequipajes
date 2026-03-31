@@ -157,17 +157,22 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
      
      if(allShifts.length === 0){ toast.error("No hay cierres en el rango seleccionado"); return; }
      
-     const exportData = allShifts.map(s => ({
-       'Fecha Contable': s.date_opened,
-       'Fondo Inicial (€)': Number(s.initial_cash),
-       'Ventas TPV Tarjeta (€)': Number(s.final_card_calculated),
-       'Ventas Metálico (€)': Number(s.final_cash_calculated),
-       'Gastos Anotados (€)': Number(s.total_expenses),
-       'Cálculo Informático (€)': Number(s.final_cash_calculated),
-       'Dinero Contado Físico (€)': Number(s.final_cash_counted),
-       'Descuadre (€)': Number(s.difference),
-       'Notas Adicionales': s.notes || ''
-     }));
+     const exportData = allShifts.map(s => {
+       // Calcular las ventas puras en metálico aislando el fondo inicial y los gastos
+       const pureCashSales = Number(s.final_cash_calculated) - Number(s.initial_cash) + Number(s.total_expenses);
+       
+       return {
+         'Fecha Contable': s.date_opened,
+         'Fondo Inicial (€)': Number(s.initial_cash),
+         'Ventas TPV Tarjeta (€)': Number(s.final_card_calculated),
+         'Ventas Metálico (€)': pureCashSales,
+         'Gastos Anotados (€)': Number(s.total_expenses),
+         'Efectivo Esperado Cajón (€)': Number(s.final_cash_calculated),
+         'Dinero Contado Físico (€)': Number(s.final_cash_counted),
+         'Descuadre (€)': Number(s.difference),
+         'Notas Adicionales': s.notes || ''
+       };
+     });
 
      const worksheet = XLSX.utils.json_to_sheet(exportData);
      const workbook = XLSX.utils.book_new();
@@ -318,7 +323,7 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
                    <tr key={h.date_opened} style={{ borderBottom: '1px solid var(--border-color)' }}>
                      <td style={{padding:'0.5rem', fontWeight:'bold'}}>{h.date_opened}</td>
                      <td style={{padding:'0.5rem'}}>{h.final_card_calculated} €</td>
-                     <td style={{padding:'0.5rem'}}>{h.final_cash_calculated} €</td>
+                     <td style={{padding:'0.5rem'}}>{(Number(h.final_cash_calculated) - Number(h.initial_cash) + Number(h.total_expenses)).toFixed(2)} €</td>
                      <td style={{padding:'0.5rem'}}>
                         {h.difference === 0 
                           ? <span style={{color:'var(--success)', fontWeight:'bold'}}>0.00€ (PERFECTO)</span> 
