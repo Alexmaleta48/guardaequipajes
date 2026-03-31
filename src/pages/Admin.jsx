@@ -34,6 +34,9 @@ function Admin() {
   const fileInputRef = useRef(null);
   const [photoModal, setPhotoModal] = useState(null);
   
+  // MODAL HISTORIAL
+  const [historyModal, setHistoryModal] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [checkoutModal, setCheckoutModal] = useState(null);
@@ -66,7 +69,7 @@ function Admin() {
       })));
 
       setHistory(todayHistory.map(item => ({
-         ...item, totalPaid: Number(item.total_paid), paymentMethod: item.payment_method || 'efectivo', checkOutTime: new Date(item.check_out_time).getTime()
+         ...item, id: item.id, ticketId: item.ticket_id, clientName: item.client_name, totalPaid: Number(item.total_paid), paymentMethod: item.payment_method || 'cash', checkOutTime: new Date(item.check_out_time).getTime(), smallBags: item.small_bags, largeBags: item.large_bags
       })));
     } catch (error) {
       console.error(error);
@@ -112,7 +115,6 @@ function Admin() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Comprimir en Cliente antes de subir a Supabase para no reventar cuotas.
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -124,7 +126,7 @@ function Admin() {
         canvas.height = img.height * scaleSize;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // 60% JPEG ~40KB
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
         setPhotoData(dataUrl);
       };
       img.src = event.target.result;
@@ -251,6 +253,19 @@ function Admin() {
     }
   };
 
+  const togglePaymentMethod = async (item) => {
+    const newMethod = item.paymentMethod === 'cash' ? 'card' : 'cash';
+    setHistory(history.map(h => h.id === item.id ? { ...h, paymentMethod: newMethod } : h));
+    try {
+      if (!item.id.toString().startsWith("temp-")) {
+        await supabase.from('luggage').update({ payment_method: newMethod }).eq('id', item.id);
+      }
+      toast.success(`Pago cambiado a ${newMethod === 'cash' ? 'Metálico' : 'Tarjeta'}`);
+    } catch(err) {
+      toast.error("Error corrigiendo en banco de datos.");
+    }
+  };
+
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => 
       item.ticketId.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -319,7 +334,7 @@ function Admin() {
         </div>
         <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
           <Link to="/" className="btn-outline" style={{color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500, padding:'0.5rem 1rem'}}>🏠 Público</Link>
-          <div className="ticket-tag" style={{ fontSize: '1rem', padding: '0.5rem 1rem', display: 'none' /* oculto en movil pq no cabe*/ }}>
+          <div className="ticket-tag" style={{ fontSize: '1rem', padding: '0.5rem 1rem', display: 'none' /* oculto en movil */ }}>
             {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
         </div>
@@ -328,7 +343,10 @@ function Admin() {
       {/* METRICS OF THE DAY */}
       <section className="stats-grid animate-fade-in" style={{ animationDelay: '0.1s' }}>
         <div className="stat-card" style={{borderColor:'var(--success)', background:'var(--success-light)', color: '#065f46'}}>
-          <div className="stat-title" style={{color: '#065f46'}}>Caja Hoy (Facturación)</div>
+          <div className="stat-title" style={{color: '#065f46', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            Caja Hoy (Facturación)
+            <button onClick={() => setHistoryModal(true)} style={{background: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #10b981', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold', color: '#065f46'}}>Ver Historial</button>
+          </div>
           <div className="stat-value">{totalRevenue.toFixed(2)} €</div>
           <div className="stat-trend" style={{ fontSize: '0.9rem', color: '#065f46', fontWeight: 600, display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
             <span>💵 Metálico: {totalCash.toFixed(2)}€</span>
@@ -358,7 +376,6 @@ function Admin() {
           <h2 className="panel-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'1rem'}}>
              <div><Plus size={24} /> Nueva Maleta</div>
              
-             {/* BOTÓN FOTO ANTI-RECLAMACIONES */}
              <div style={{position: 'relative'}}>
                 <input 
                   type="file" accept="image/*" capture="environment" 
@@ -482,7 +499,6 @@ function Admin() {
                     <div style={{ fontWeight: 600, display: 'flex', alignItems:'center', gap: '0.5rem' }}>
                        {item.clientName}
                        
-                       {/* Iconos Extra de la Tarjeta */}
                        <div style={{marginLeft:'auto', display:'flex', gap:'0.5rem'}}>
                           {item.photoData && (
                             <button onClick={() => setPhotoModal(item.photoData)} title="Ver Foto Anti-Reclamación" style={{color: '#6366f1', background:'none', border:'none', cursor:'pointer', padding: 0}}>
@@ -567,6 +583,52 @@ function Admin() {
           </div>
         </div>
       )}
+
+      {/* HISTORY MODAL (Auditoría Caja Diaria) */}
+      {historyModal && (
+        <div className="modal-overlay animate-fade-in" onClick={() => setHistoryModal(false)} style={{ zIndex: 1000 }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 className="modal-title" style={{ margin: 0 }}>Historial de Ventas Hoy</h2>
+              <button onClick={() => setHistoryModal(false)} style={{ background: '#f1f5f9', padding: '0.5rem', borderRadius: '50%', color: 'var(--text-secondary)' }}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            {todaysHistory.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0' }}>Aún no hay caja hoy.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {todaysHistory.map(item => (
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span className="ticket-tag" style={{ fontSize: '0.8rem', padding: '0.2rem 0.4rem' }}>{item.ticketId}</span>
+                        {item.clientName || 'Turista'}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        Cobrado a las {new Date(item.checkOutTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700, minWidth: '60px', textAlign: 'right' }}>{item.totalPaid.toFixed(2)}€</div>
+                      <button 
+                        onClick={() => togglePaymentMethod(item)}
+                        title="Clic para corregir método de pago si te equivocaste"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', background: 'white', color: 'var(--text-primary)', cursor: 'pointer', width: '95px', justifyContent: 'center' }}
+                      >
+                        {item.paymentMethod === 'cash' ? <Banknote size={16} color="#10b981" /> : <CreditCard size={16} color="var(--accent-color)" />}
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{item.paymentMethod === 'cash' ? 'EFECTIVO' : 'TARJETA'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
