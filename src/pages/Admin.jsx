@@ -351,11 +351,11 @@ function Admin() {
         </div>
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '2rem' }}>
+      <div className="main-layout">
         
         {/* CHECK-IN */}
         <section className="glass-panel animate-fade-in" style={{ animationDelay: '0.2s', alignSelf: 'start', padding: '2rem' }}>
-          <h2 className="panel-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <h2 className="panel-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'1rem'}}>
              <div><Plus size={24} /> Nueva Maleta</div>
              
              {/* BOTÓN FOTO ANTI-RECLAMACIONES */}
@@ -380,7 +380,7 @@ function Admin() {
              </div>
           </h2>
           <form onSubmit={handleCheckIn}>
-            <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group form-row">
               <div>
                 <label className="form-label">Estantería a Asignar</label>
                 <select 

@@ -64,7 +64,7 @@ export default function Landing() {
   return (
     <div style={{ fontFamily: '"Inter", sans-serif', color: 'var(--text-primary)' }}>
       {/* HEADER */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 2rem', background: 'white', borderBottom: '1px solid #eaeaea' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'white', borderBottom: '1px solid #eaeaea', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.2rem', color: 'var(--accent-color)' }}>
           <Package size={28} />
           Lockers Elche
@@ -84,7 +84,7 @@ export default function Landing() {
       </header>
 
       {/* HERO SECTION */}
-      <section style={{ padding: '4rem 2rem', textAlign: 'center', background: 'linear-gradient(to bottom, #f8fafc, white)' }}>
+      <section style={{ padding: '3rem 1rem', textAlign: 'center', background: 'linear-gradient(to bottom, #f8fafc, white)' }}>
         <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1.1, marginBottom: '1.5rem', color: '#0f172a' }}>
           {t.title} <br /> {t.subtitle} <span style={{ color: 'var(--accent-color)' }}>{t.city}</span>
         </h1>
