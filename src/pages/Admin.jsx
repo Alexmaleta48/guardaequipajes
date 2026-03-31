@@ -11,11 +11,11 @@ const HOURS_INCLUDED = 6;
 const EXTRA_HOUR_RATE = 0.50;
 const MAX_SPACES = 40;
 
-// Ojo: Esto es una constante pero la seguridad REAL la valida el servidor de supabase y le da un Token jwt a la sesión, no pasa nada si lo lee alguien en código
-const ADMIN_EMAIL = 'alexmaletas48@gmail.com'; 
+// Seguridad manejada por Supabase Auth + JWT Tokens
 
 function Admin() {
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [emailInput, setEmailInput] = useState(() => localStorage.getItem('admin_email') || '');
   const [pinInput, setPinInput] = useState('');
 
   const [inventory, setInventory] = useState([]);
@@ -106,6 +106,11 @@ function Admin() {
 
   const handlePinSubmit = async (e) => {
     e.preventDefault();
+    if (!emailInput || !emailInput.includes('@')) {
+      toast.error("Format de correo inválido");
+      return;
+    }
+
     if (!pinInput || pinInput.length < 6) {
       toast.error("La contraseña debe tener mínimo 6 números/letras.");
       return;
@@ -113,7 +118,7 @@ function Admin() {
 
     toast.loading("Verificando firma con Servidor...", { id: 'auth' });
     const { error } = await supabase.auth.signInWithPassword({
-      email: ADMIN_EMAIL,
+      email: emailInput.trim(),
       password: pinInput
     });
     
@@ -122,6 +127,7 @@ function Admin() {
       setPinInput('');
     } else {
       toast.success("Búnker Abierto con Éxito", { id: 'auth', icon: '🛡️' });
+      localStorage.setItem('admin_email', emailInput.trim());
     }
   };
 
@@ -276,9 +282,14 @@ function Admin() {
           <Lock size={48} color="var(--accent-color)" style={{ margin: '0 auto 1rem' }} />
           <h2 style={{ marginBottom: '1.5rem', color: '#0f172a' }}>Acceso Restringido</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-            Cuenta vinculada: <span style={{fontWeight:'bold'}}>{ADMIN_EMAIL}</span>
+            Panel de control privado. Validar credenciales Supabase.
           </p>
           <form onSubmit={handlePinSubmit}>
+            <input 
+              type="email" className="form-input" placeholder="Correo Administrador..." 
+              style={{ textAlign: 'center', fontSize: '1rem', marginBottom: '1rem' }}
+              value={emailInput} onChange={e => setEmailInput(e.target.value)} required
+            />
             <input 
               type="password" className="form-input" placeholder="Contraseña Maestra Supabase..." 
               style={{ textAlign: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}
