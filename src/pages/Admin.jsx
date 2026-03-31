@@ -4,6 +4,7 @@ import { Backpack, Briefcase, Clock, Plus, Package, AlertTriangle, CreditCard, B
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
+import AccountingPanel from '../components/AccountingPanel';
 
 const PRICE_SMALL = 4;
 const PRICE_LARGE = 6;
@@ -38,6 +39,8 @@ function Admin() {
   const [photoData, setPhotoData] = useState(null);
   const fileInputRef = useRef(null);
   const [photoModal, setPhotoModal] = useState(null);
+  
+  const [currentTab, setCurrentTab] = useState('dashboard');
   
   const [historyModal, setHistoryModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -358,9 +361,17 @@ function Admin() {
            </div>
         </div>
         <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
+          <button onClick={() => setCurrentTab('dashboard')} className="btn-outline" style={{ background: currentTab === 'dashboard' ? 'var(--accent-color)' : 'transparent', color: currentTab === 'dashboard' ? 'white' : 'var(--text-primary)', padding: '0.4rem 1rem', fontWeight: 600 }}>Caja Diaria</button>
+          <button onClick={() => setCurrentTab('accounting')} className="btn-outline" style={{ background: currentTab === 'accounting' ? 'var(--accent-color)' : 'transparent', color: currentTab === 'accounting' ? 'white' : 'var(--text-primary)', padding: '0.4rem 1rem', fontWeight: 600 }}>📊 Contabilidad</button>
+
           <Link to="/" className="btn-outline" style={{color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500, padding:'0.5rem 1rem'}}>🏠 Web Pública</Link>
         </div>
       </header>
+
+      {/* RENDER ACCOUNTING TAB */}
+      {currentTab === 'accounting' && <AccountingPanel isDark={isDark} totalCashToday={totalCash} totalCardToday={totalCard} />}
+
+      <div style={{ display: currentTab === 'dashboard' ? 'block' : 'none' }}>
 
       {/* METRICS OF THE DAY */}
       <section className="stats-grid animate-fade-in" style={{ animationDelay: '0.1s' }}>
@@ -689,6 +700,7 @@ function Admin() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }
