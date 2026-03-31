@@ -1,10 +1,11 @@
--- Añadiendo columna para WhatsApp al esquema original
+-- Añadiendo columna para las fotos de seguridad (base64)
 
 CREATE TABLE IF NOT EXISTS luggage (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   ticket_id TEXT NOT NULL,
   client_name TEXT,
-  client_phone TEXT, -- NUEVO: Para el WhatsApp
+  client_phone TEXT, 
+  photo_data TEXT, -- NUEVO: Para guardar la foto tipo Base64
   small_bags INTEGER DEFAULT 0,
   large_bags INTEGER DEFAULT 0,
   check_in_time TIMESTAMPTZ DEFAULT NOW(),
@@ -22,5 +23,5 @@ FOR ALL TO anon
 USING (true)
 WITH CHECK (true);
 
--- Si ya ejecutaste la primera vez, solo necesitas correr esto para actualizar:
--- ALTER TABLE luggage ADD COLUMN client_phone TEXT;
+-- IMPORTANTE: Corre esto en el SQL Editor de Supabase:
+-- ALTER TABLE luggage ADD COLUMN photo_data TEXT;
