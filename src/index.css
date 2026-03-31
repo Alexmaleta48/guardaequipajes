@@ -489,3 +489,55 @@ button {
   }
 }
 
+/* ================================= */
+/*          DARK THEME (NOCHE)       */
+/* ================================= */
+[data-theme="dark"] {
+  --bg-color: #0f172a;
+  --surface-color: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
+  --accent-light: rgba(79, 70, 229, 0.25);
+  --success-light: rgba(16, 185, 129, 0.15);
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --danger-light: rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="dark"] .glass-panel {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .form-input, 
+[data-theme="dark"] .counter-group {
+  background-color: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .counter-btn {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .ticket-tag {
+  background-color: rgba(79, 70, 229, 0.3);
+  color: #818cf8;
+}
+
+[data-theme="dark"] .stat-card {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .modal-content {
+  background-color: #1e293b;
+}
+
+[data-theme="dark"] .price-breakdown {
+  background-color: #0f172a;
+}
+

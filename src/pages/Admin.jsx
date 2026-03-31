@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import '../App.css';
-import { Backpack, Briefcase, Clock, Plus, Package, AlertTriangle, CreditCard, Banknote, RefreshCcw, Search, MessageCircle, Lock, LayoutDashboard, Camera, X, LogOut } from 'lucide-react';
+import { Backpack, Briefcase, Clock, Plus, Package, AlertTriangle, CreditCard, Banknote, RefreshCcw, Search, MessageCircle, Lock, LayoutDashboard, Camera, X, LogOut, Moon, Sun, Grid, List } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
@@ -17,6 +17,12 @@ function Admin() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [emailInput, setEmailInput] = useState(() => localStorage.getItem('admin_email') || '');
   const [pinInput, setPinInput] = useState('');
+
+  // TEMA OSCURO
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  
+  // MODO VISTA RADAR
+  const [viewMode, setViewMode] = useState('map'); // 'map' | 'list'
 
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
@@ -38,6 +44,12 @@ function Admin() {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [checkoutModal, setCheckoutModal] = useState(null);
   
+  // APLICAR TEMA OSCURO HTML
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
+
   // CONTROL DE SESIÓN SEGURA SUPABASE
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -107,7 +119,7 @@ function Admin() {
   const handlePinSubmit = async (e) => {
     e.preventDefault();
     if (!emailInput || !emailInput.includes('@')) {
-      toast.error("Format de correo inválido");
+      toast.error("Formato de correo inválido");
       return;
     }
 
@@ -280,7 +292,7 @@ function Admin() {
         <Toaster />
         <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
           <Lock size={48} color="var(--accent-color)" style={{ margin: '0 auto 1rem' }} />
-          <h2 style={{ marginBottom: '1.5rem', color: '#0f172a' }}>Acceso Restringido</h2>
+          <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Acceso Restringido</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
             Panel de control privado. Validar credenciales Supabase.
           </p>
@@ -291,7 +303,7 @@ function Admin() {
               value={emailInput} onChange={e => setEmailInput(e.target.value)} required
             />
             <input 
-              type="password" className="form-input" placeholder="Contraseña Maestra Supabase..." 
+              type="password" className="form-input" placeholder="Contraseña Maestra..." 
               style={{ textAlign: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}
               value={pinInput} onChange={e => setPinInput(e.target.value)} autoFocus
             />
@@ -315,10 +327,11 @@ function Admin() {
     <div className="app-container" style={{maxWidth: '1400px'}}>
       <Toaster position="top-center" />
       
+      {/* SOLUCIÓN AL CORTE DE FOTO VERTICAL (Fix Modal) */}
       {photoModal && (
         <div className="modal-overlay animate-fade-in" onClick={() => setPhotoModal(null)} style={{ zIndex: 9999 }}>
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-             <img src={photoModal} alt="Equipaje" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius:'10px' }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <img src={photoModal} alt="Equipaje" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius:'10px' }} />
              <button onClick={() => setPhotoModal(null)} style={{ position:'absolute', top:'-15px', right:'-15px', background:'white', color:'black', border:'none', borderRadius:'50%', width:'40px', height:'40px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.3)', cursor:'pointer' }}>
                <X size={24} />
              </button>
@@ -327,36 +340,37 @@ function Admin() {
       )}
 
       <header className="header animate-fade-in">
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
            <h1>
-             <LayoutDashboard className="text-accent" color="var(--accent-color)" size={32} />
+             <LayoutDashboard color="var(--accent-color)" size={32} />
              Mostrador Seguro
            </h1>
-           <button onClick={fetchData} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%' }} title="Sincronizar Datos">
-             <RefreshCcw size={16} className={isLoading ? "animate-spin" : ""} />
-           </button>
-           {/* BOTON DE LOGOUT MILITAR */}
-           <button onClick={handleLogout} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%', color: 'var(--danger)', borderColor: 'var(--danger-light)' }} title="Cerrar Búnker Supabase">
-             <LogOut size={16} />
-           </button>
+           <div style={{ display: 'flex', gap: '0.5rem' }}>
+             <button onClick={() => setIsDark(!isDark)} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }} title={isDark ? "Activar Sol" : "Activar Noche"}>
+               {isDark ? <Sun size={16} /> : <Moon size={16} />}
+             </button>
+             <button onClick={fetchData} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%' }} title="Sincronizar Datos">
+               <RefreshCcw size={16} className={isLoading ? "animate-spin" : ""} />
+             </button>
+             <button onClick={handleLogout} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%', color: 'var(--danger)', borderColor: 'var(--danger-light)' }} title="Cerrar Búnker Supabase">
+               <LogOut size={16} />
+             </button>
+           </div>
         </div>
         <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
           <Link to="/" className="btn-outline" style={{color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500, padding:'0.5rem 1rem'}}>🏠 Web Pública</Link>
-          <div className="ticket-tag" style={{ fontSize: '1rem', padding: '0.5rem 1rem', display: 'none' }}>
-            {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </div>
         </div>
       </header>
 
       {/* METRICS OF THE DAY */}
       <section className="stats-grid animate-fade-in" style={{ animationDelay: '0.1s' }}>
-        <div className="stat-card" style={{borderColor:'var(--success)', background:'var(--success-light)', color: '#065f46'}}>
-          <div className="stat-title" style={{color: '#065f46', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+        <div className="stat-card" style={{borderColor: isDark ? '#064e3b' : 'var(--success)', background: isDark ? 'rgba(16,185,129,0.1)' : 'var(--success-light)', color: isDark ? '#34d399' : '#065f46'}}>
+          <div className="stat-title" style={{color: isDark ? '#34d399' : '#065f46', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
             Caja Hoy (Facturación)
-            <button onClick={() => setHistoryModal(true)} style={{background: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #10b981', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold', color: '#065f46'}}>Ver Historial</button>
+            <button onClick={() => setHistoryModal(true)} style={{background: isDark ? '#064e3b' : 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #10b981', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold', color: isDark ? 'white' : '#065f46'}}>Ver Historial</button>
           </div>
-          <div className="stat-value">{totalRevenue.toFixed(2)} €</div>
-          <div className="stat-trend" style={{ fontSize: '0.9rem', color: '#065f46', fontWeight: 600, display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+          <div className="stat-value" style={{color: isDark ? '#10b981' : '#065f46'}}>{totalRevenue.toFixed(2)} €</div>
+          <div className="stat-trend" style={{ fontSize: '0.9rem', color: isDark ? '#34d399' : '#065f46', fontWeight: 600, display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
             <span>💵 Metálico: {totalCash.toFixed(2)}€</span>
             <span>💳 TPV: {totalCard.toFixed(2)}€</span>
           </div>
@@ -364,7 +378,7 @@ function Admin() {
         <div className="stat-card">
           <div className="stat-title">Clientela Atendida Hoy</div>
           <div className="stat-value">{todaysHistory.length} turistas</div>
-          <div className="stat-trend">Verificados desde Base de Datos</div>
+          <div className="stat-trend">Verificados en BD</div>
         </div>
         <div className="stat-card" style={{borderColor: availableSpaces.length === 0 ? 'var(--danger)' : 'var(--accent-color)'}}>
           <div className="stat-title">Ocupación Física Tienda</div>
@@ -389,7 +403,7 @@ function Admin() {
                   ref={fileInputRef} onChange={handlePhotoCapture} style={{display: 'none'}} id="camera-upload"
                 />
                 {!photoData ? (
-                  <label htmlFor="camera-upload" title="Fotos Anti-Robo de Maletas" style={{display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f1f5f9', color: '#64748b', padding: '0.4rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer', border: '1px solid #cbd5e1'}}>
+                  <label htmlFor="camera-upload" title="Fotos Anti-Robo de Maletas" style={{display: 'flex', alignItems: 'center', gap: '0.4rem', background: isDark ? '#1e293b' : '#f1f5f9', color: isDark ? '#94a3b8' : '#64748b', padding: '0.4rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer', border: '1px solid var(--border-color)'}}>
                      <Camera size={16} /> Hacer Foto Extra
                   </label>
                 ) : (
@@ -408,7 +422,7 @@ function Admin() {
                 <label className="form-label">Maletero Destino</label>
                 <select 
                   className="form-input" 
-                  style={{ background: '#f8fafc', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)', cursor: 'pointer' }}
+                  style={{ background: isDark ? '#0f172a' : '#f8fafc', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)', cursor: 'pointer' }}
                   value={ticketId} onChange={e => setTicketId(e.target.value)} disabled={availableSpaces.length === 0}
                 >
                   {availableSpaces.length === 0 && <option value="">LLENO (0 / 40)</option>}
@@ -417,11 +431,11 @@ function Admin() {
               </div>
               <div>
                 <label className="form-label">Nombre (Opcional)</label>
-                <input type="text" className="form-input" placeholder="Turista..." value={clientName} onChange={e => setClientName(e.target.value)} disabled={availableSpaces.length === 0} />
+                <input type="text" className="form-input" placeholder="Anónimo..." value={clientName} onChange={e => setClientName(e.target.value)} disabled={availableSpaces.length === 0} />
               </div>
             </div>
 
-            <div className="form-group" style={{border: '1px solid #e2e8f0', padding: '1rem', borderRadius:'8px', background: '#fafafa', opacity: availableSpaces.length === 0 ? 0.5 : 1}}>
+            <div className="form-group" style={{border: '1px solid var(--border-color)', padding: '1rem', borderRadius:'8px', background: isDark ? 'rgba(0,0,0,0.2)' : '#fafafa', opacity: availableSpaces.length === 0 ? 0.5 : 1}}>
               <label className="form-label" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <MessageCircle size={18} color="#25D366" /> 
                 WhatsApp para Enviar Alerta
@@ -429,8 +443,8 @@ function Admin() {
               <input type="tel" className="form-input" placeholder="Ej: +34 600 12 34 56" value={clientPhone} onChange={e => setClientPhone(e.target.value)} style={{marginBottom: '0.5rem'}} disabled={availableSpaces.length === 0} />
               
               <div style={{display:'flex', gap: '0.5rem', marginTop: '0.5rem'}}>
-                 <div style={{flex:1, textAlign:'center', fontSize:'0.8rem', padding:'0.4rem', border: waLang==='en'?'2px solid var(--accent-color)':'1px solid #ccc', borderRadius:'4px', cursor:'pointer', background: waLang==='en'?'var(--accent-light)':'#fff', fontWeight: waLang==='en'?700:400}} onClick={()=>setWaLang('en')}>🇬🇧 Inglés</div>
-                 <div style={{flex:1, textAlign:'center', fontSize:'0.8rem', padding:'0.4rem', border: waLang==='es'?'2px solid var(--accent-color)':'1px solid #ccc', borderRadius:'4px', cursor:'pointer', background: waLang==='es'?'var(--accent-light)':'#fff', fontWeight: waLang==='es'?700:400}} onClick={()=>setWaLang('es')}>🇪🇸 Español</div>
+                 <div style={{flex:1, textAlign:'center', fontSize:'0.8rem', padding:'0.4rem', border: waLang==='en'?'2px solid var(--accent-color)':'1px solid var(--border-color)', borderRadius:'4px', cursor:'pointer', background: waLang==='en'?'var(--accent-light)':'transparent', fontWeight: waLang==='en'?700:400}} onClick={()=>setWaLang('en')}>🇬🇧 Inglés</div>
+                 <div style={{flex:1, textAlign:'center', fontSize:'0.8rem', padding:'0.4rem', border: waLang==='es'?'2px solid var(--accent-color)':'1px solid var(--border-color)', borderRadius:'4px', cursor:'pointer', background: waLang==='es'?'var(--accent-light)':'transparent', fontWeight: waLang==='es'?700:400}} onClick={()=>setWaLang('es')}>🇪🇸 Español</div>
               </div>
             </div>
 
@@ -438,7 +452,7 @@ function Admin() {
             <div className="counter-group">
               <div className="counter-info">
                 <span className="counter-title">Mochilas / Standard</span>
-                <span className="counter-subtitle">{PRICE_SMALL} € / 6h y +0.50€ extras/h</span>
+                <span className="counter-subtitle">{PRICE_SMALL} € base</span>
               </div>
               <div className="counter-controls">
                 <button type="button" className="counter-btn" onClick={() => setSmallBags(Math.max(0, smallBags - 1))} disabled={smallBags === 0 || availableSpaces.length === 0}>-</button>
@@ -450,7 +464,7 @@ function Admin() {
             <div className="counter-group">
               <div className="counter-info">
                 <span className="counter-title">Maletas Gigantes</span>
-                <span className="counter-subtitle">{PRICE_LARGE} € / 6h y +0.50€ extras/h</span>
+                <span className="counter-subtitle">{PRICE_LARGE} € base</span>
               </div>
               <div className="counter-controls">
                 <button type="button" className="counter-btn" onClick={() => setLargeBags(Math.max(0, largeBags - 1))} disabled={largeBags === 0 || availableSpaces.length === 0}>-</button>
@@ -460,7 +474,7 @@ function Admin() {
             </div>
 
             <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem', padding: '1rem', fontSize: '1.1rem', background: availableSpaces.length === 0 ? 'var(--text-secondary)' : 'var(--accent-color)' }} disabled={(smallBags === 0 && largeBags === 0) || availableSpaces.length === 0}>
-              <Plus size={20} /> {availableSpaces.length === 0 ? 'Sin Espacio Libre' : 'Ocupar Estantería y Guardar'}
+              <Plus size={20} /> {availableSpaces.length === 0 ? 'Sin Espacio Libre' : 'Ocupar Estante Nª' + (ticketId || '?')}
             </button>
           </form>
         </section>
@@ -468,75 +482,122 @@ function Admin() {
         {/* ACTIVE DASHBOARD */}
         <section className="glass-panel animate-fade-in" style={{ animationDelay: '0.3s' }}>
           <div className="header" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <h2 className="panel-title" style={{ margin: 0 }}><Clock size={24} /> Tráfico Local</h2>
+            <h2 className="panel-title" style={{ margin: 0 }}><Clock size={24} /> Radar Visual</h2>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button className="btn-outline" onClick={() => setViewMode('map')} style={{background: viewMode === 'map' ? 'var(--accent-light)' : 'transparent', color: viewMode === 'map' ? 'var(--accent-color)' : 'var(--text-secondary)', padding:'0.5rem', borderRadius:'6px' }} title="Plano Estantes"><Grid size={18}/></button>
+              <button className="btn-outline" onClick={() => setViewMode('list')} style={{background: viewMode === 'list' ? 'var(--accent-light)' : 'transparent', color: viewMode === 'list' ? 'var(--accent-color)' : 'var(--text-secondary)', padding:'0.5rem', borderRadius:'6px'}} title="Lista Bultos"><List size={18}/></button>
+            </div>
+            
             <div style={{ position: 'relative', flex: '1', minWidth: '300px' }}>
               <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
               <input 
                 type="text" className="form-input" placeholder="Busca por Nombre o Número..." 
-                style={{ paddingLeft: '2.5rem', borderRadius: '2rem', height: '100%', border: '2px solid #e2e8f0' }}
+                style={{ paddingLeft: '2.5rem', borderRadius: '2rem', height: '100%', border: '2px solid var(--border-color)', background: isDark ? '#0f172a' : 'white' }}
                 value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
           </div>
 
           {isLoading && inventory.length === 0 ? (
-             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>Cargando ocupación Segura...</div>
-          ) : filteredInventory.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
-              <Package size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
-              <p>{inventory.length === 0 ? "Local vacío de momento." : "Búsqueda sin resultados."}</p>
-            </div>
+             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>Cargando Plano...</div>
           ) : (
-            <div className="dashboard-grid">
-              {filteredInventory.map(item => {
-                const { formatted, isWarning, isDanger } = calculateTimeInfo(item.checkInTime);
-                const { totalPrice } = calculatePrice(item);
-                return (
-                  <div key={item.id} className={`luggage-card ${isDanger ? 'danger-state' : isWarning ? 'warning-state' : ''}`}>
-                    <div className="card-header">
-                      <div className="ticket-tag" style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize:'1.2rem', padding:'0.4rem 1rem'}}>
-                        Nº {item.ticketId}
-                      </div>
-                      <div className={`card-time ${isDanger ? 'time-danger' : isWarning ? 'time-warning' : ''}`}>
-                        {isDanger ? <AlertTriangle size={16} /> : <Clock size={16} />}
-                        {formatted}
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 600, display: 'flex', alignItems:'center', gap: '0.5rem' }}>
-                       {item.clientName}
-                       
-                       <div style={{marginLeft:'auto', display:'flex', gap:'0.5rem'}}>
-                          {item.photoData && (
-                            <button onClick={() => setPhotoModal(item.photoData)} title="Ver Foto" style={{color: '#6366f1', background:'none', border:'none', cursor:'pointer', padding: 0}}>
-                              <Camera size={20} />
-                            </button>
-                          )}
-                          {item.clientPhone && (
-                            <button onClick={() => openWhatsApp(item.clientPhone, item.ticketId, item.smallBags + item.largeBags, item.waLang || 'en')} title="Alertar Turista" style={{color: '#25D366', background:'none', border:'none', cursor:'pointer', padding: 0}}>
-                              <MessageCircle size={20} />
-                            </button>
-                          )}
-                       </div>
-                    </div>
+            <>
+              {/* PLANO FÍSICO INTERACTIVO (MAPA) */}
+              {viewMode === 'map' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(75px, 1fr))', gap: '0.8rem', padding: '1rem 0' }}>
+                  {Array.from({length: MAX_SPACES}, (_, i) => i + 1).map(num => {
+                    const slotStr = num.toString();
+                    const isOccupied = inventory.find(i => i.ticketId === slotStr);
                     
-                    <div className="card-items">
-                      {item.smallBags > 0 && (<div className="item-badge"><Backpack size={16} /> x{item.smallBags} Chica</div>)}
-                      {item.largeBags > 0 && (<div className="item-badge"><Briefcase size={16} /> x{item.largeBags} Grand</div>)}
+                    if (isOccupied) {
+                       const { isDanger, isWarning } = calculateTimeInfo(isOccupied.checkInTime);
+                       const bg = isDanger ? 'var(--danger)' : isWarning ? 'var(--warning)' : 'var(--accent-color)';
+                       return (
+                         <button key={num} onClick={() => setCheckoutModal(isOccupied)} 
+                                 title={`${isOccupied.clientName} - ${isOccupied.smallBags + isOccupied.largeBags} bultos`}
+                                 style={{ background: bg, color: 'white', border: 'none', borderRadius: '8px', height: '75px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition:'transform 0.1s' }}
+                                 onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+                                 onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
+                            <span style={{ fontSize: '1.4rem'}}>{num}</span>
+                            <span style={{fontSize: '0.7rem', opacity: 0.9, marginTop:'2px' }}>{isOccupied.smallBags + isOccupied.largeBags} bts</span>
+                         </button>
+                       )
+                    } else {
+                       return (
+                         <button key={num} onClick={() => { setTicketId(slotStr); window.scrollTo({top:0, behavior:'smooth'}) }} 
+                                 title="Estante Libre - Click para pre-asignar"
+                                 style={{ background: isDark ? '#0f172a' : '#f8fafc', color: 'var(--success)', border: '2px dashed var(--success)', borderRadius: '8px', height: '75px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                            <span style={{ fontSize: '1.2rem', opacity: 0.6 }}>{num}</span>
+                         </button>
+                       )
+                    }
+                  })}
+                </div>
+              )}
+
+              {/* LISTA TRADICIONAL */}
+              {viewMode === 'list' && (
+                <>
+                  {filteredInventory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
+                      <Package size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
+                      <p>{inventory.length === 0 ? "Local vacío de momento." : "Búsqueda sin resultados."}</p>
                     </div>
-                    
-                    <div className="card-footer" style={{ borderTop: 'none', paddingTop: 0 }}>
-                      <div>{isDanger && <span className="extra-fee">+6h (Añadido recargo)</span>}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div className="estimated-price">{totalPrice.toFixed(2)} €</div>
-                        <button className="btn btn-primary" style={{ padding: '0.6rem 1rem', width: 'auto' }} onClick={() => setCheckoutModal(item)}>
-                          Desocupar
-                        </button>
-                      </div>
+                  ) : (
+                    <div className="dashboard-grid">
+                      {filteredInventory.map(item => {
+                        const { formatted, isWarning, isDanger } = calculateTimeInfo(item.checkInTime);
+                        const { totalPrice } = calculatePrice(item);
+                        return (
+                          <div key={item.id} className={`luggage-card ${isDanger ? 'danger-state' : isWarning ? 'warning-state' : ''}`}>
+                            <div className="card-header">
+                              <div className="ticket-tag" style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize:'1.2rem', padding:'0.4rem 1rem'}}>
+                                Nº {item.ticketId}
+                              </div>
+                              <div className={`card-time ${isDanger ? 'time-danger' : isWarning ? 'time-warning' : ''}`}>
+                                {isDanger ? <AlertTriangle size={16} /> : <Clock size={16} />}
+                                {formatted}
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: 600, display: 'flex', alignItems:'center', gap: '0.5rem' }}>
+                               {item.clientName}
+                               
+                               <div style={{marginLeft:'auto', display:'flex', gap:'0.5rem'}}>
+                                  {item.photoData && (
+                                    <button onClick={() => setPhotoModal(item.photoData)} title="Ver Foto" style={{color: 'var(--accent-color)', background:'none', border:'none', cursor:'pointer', padding: 0}}>
+                                      <Camera size={20} />
+                                    </button>
+                                  )}
+                                  {item.clientPhone && (
+                                    <button onClick={() => openWhatsApp(item.clientPhone, item.ticketId, item.smallBags + item.largeBags, item.waLang || 'en')} title="Alertar Turista" style={{color: '#25D366', background:'none', border:'none', cursor:'pointer', padding: 0}}>
+                                      <MessageCircle size={20} />
+                                    </button>
+                                  )}
+                               </div>
+                            </div>
+                            
+                            <div className="card-items">
+                              {item.smallBags > 0 && (<div className="item-badge"><Backpack size={16} /> x{item.smallBags} Chica</div>)}
+                              {item.largeBags > 0 && (<div className="item-badge"><Briefcase size={16} /> x{item.largeBags} Grand</div>)}
+                            </div>
+                            
+                            <div className="card-footer" style={{ borderTop: 'none', paddingTop: 0 }}>
+                              <div>{isDanger && <span className="extra-fee">+6h (Añadido recargo)</span>}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div className="estimated-price">{totalPrice.toFixed(2)} €</div>
+                                <button className="btn btn-primary" style={{ padding: '0.6rem 1rem', width: 'auto' }} onClick={() => setCheckoutModal(item)}>
+                                  Desocupar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </section>
       </div>
@@ -544,14 +605,24 @@ function Admin() {
       {checkoutModal && (
         <div className="modal-overlay animate-fade-in" onClick={() => setCheckoutModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="modal-title">Caja Tickets (Salida)</h2>
-              <div className="ticket-tag" style={{background: 'var(--text-primary)', color: 'white'}}>Estante Nº {checkoutModal.ticketId}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 className="modal-title" style={{margin:0}}>Cobra y Libera el Nº {checkoutModal.ticketId}</h2>
+              <div className="ticket-tag" style={{background: 'var(--text-primary)', color: 'var(--bg-color)'}}><Clock size={16} style={{display:'inline', verticalAlign:'middle'}}/> Llevan {calculateTimeInfo(checkoutModal.checkInTime).formatted}</div>
             </div>
             
+            <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap:'wrap' }}>
+               <div style={{ background: 'var(--bg-color)', padding: '0.4rem 0.8rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>👤 {checkoutModal.clientName || 'Turista'}</div>
+               {checkoutModal.clientPhone && (
+                 <button className="btn-outline" onClick={() => openWhatsApp(checkoutModal.clientPhone, checkoutModal.ticketId, checkoutModal.smallBags + checkoutModal.largeBags, checkoutModal.waLang || 'en')} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', color: '#25D366', borderColor: '#25D366', borderRadius: '4px', display:'flex', alignItems:'center' }}><MessageCircle size={14} style={{marginRight:'4px'}}/> Whatsapp</button>
+               )}
+               {checkoutModal.photoData && (
+                 <button className="btn-outline" onClick={() => setPhotoModal(checkoutModal.photoData)} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', color: 'var(--text-primary)', borderColor: 'var(--border-color)', borderRadius: '4px', display:'flex', alignItems:'center' }}><Camera size={14} style={{marginRight:'4px'}}/> Ver Foto Maleta</button>
+               )}
+            </div>
+
             <div className="price-breakdown">
-              <div className="breakdown-row"><span>{checkoutModal.smallBags}x Mochila o similar [4€ base]</span><span>{(checkoutModal.smallBags * PRICE_SMALL).toFixed(2)} €</span></div>
-              <div className="breakdown-row"><span>{checkoutModal.largeBags}x Especial Pesada [6€ base]</span><span>{(checkoutModal.largeBags * PRICE_LARGE).toFixed(2)} €</span></div>
+              <div className="breakdown-row"><span>{checkoutModal.smallBags}x Mochila o similar [4€/6h]</span><span>{(checkoutModal.smallBags * PRICE_SMALL).toFixed(2)} €</span></div>
+              <div className="breakdown-row"><span>{checkoutModal.largeBags}x Especial Pesada [6€/6h]</span><span>{(checkoutModal.largeBags * PRICE_LARGE).toFixed(2)} €</span></div>
               {calculatePrice(checkoutModal).extraHours > 0 && (
               <div className="breakdown-row" style={{ color: 'var(--danger)', fontWeight: 500 }}><span>Penalización por +{calculatePrice(checkoutModal).extraHours}h extra</span><span>{(calculatePrice(checkoutModal).extraHoursFees).toFixed(2)} €</span></div>
               )}
@@ -559,15 +630,15 @@ function Admin() {
             </div>
             
             <div style={{ marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-              Dale salida para que tu DB deje el cajón como Libre para el sistema.
+              El cajón Nº {checkoutModal.ticketId} pasará a estar verde en el mapa para el siguiente.
             </div>
             
             <div className="modal-actions">
               <button className="btn" style={{ backgroundColor: '#22c55e', color: 'white' }} onClick={() => confirmCheckout('cash')}>
-                <Banknote size={20} /> Metálico / En mano
+                <Banknote size={20} /> Metálico
               </button>
               <button className="btn btn-primary" onClick={() => confirmCheckout('card')}>
-                <CreditCard size={20} /> TPV / Datáfono
+                <CreditCard size={20} /> TPV (Card)
               </button>
             </div>
           </div>
@@ -580,7 +651,7 @@ function Admin() {
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 className="modal-title" style={{ margin: 0 }}>Arqueo de Ventas Diario</h2>
-              <button onClick={() => setHistoryModal(false)} style={{ background: '#f1f5f9', padding: '0.5rem', borderRadius: '50%', color: 'var(--text-secondary)' }}>
+              <button onClick={() => setHistoryModal(false)} style={{ background: 'var(--bg-color)', padding: '0.5rem', borderRadius: '50%', color: 'var(--text-secondary)' }}>
                 <X size={20} />
               </button>
             </div>
@@ -590,7 +661,7 @@ function Admin() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {todaysHistory.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
                     <div>
                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="ticket-tag" style={{ fontSize: '0.8rem', padding: '0.2rem 0.4rem' }}>{item.ticketId}</span>
@@ -603,8 +674,8 @@ function Admin() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       <div style={{ fontSize: '1.2rem', fontWeight: 700, minWidth: '60px', textAlign: 'right' }}>{item.totalPaid.toFixed(2)}€</div>
                       <button 
-                        onClick={() => togglePaymentMethod(item)} title="Auditoría: Cambiar si te equivocaste en la caja"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', background: 'white', color: 'var(--text-primary)', cursor: 'pointer', width: '95px', justifyContent: 'center', transition: '0.2s' }}
+                        onClick={() => togglePaymentMethod(item)} title="Cambiar si te equivocaste en la caja"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-color)', color: 'var(--text-primary)', cursor: 'pointer', width: '95px', justifyContent: 'center', transition: '0.2s' }}
                       >
                         {item.paymentMethod === 'cash' ? <Banknote size={16} color="#10b981" /> : <CreditCard size={16} color="var(--accent-color)" />}
                         <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{item.paymentMethod === 'cash' ? 'EFECTIVO' : 'TARJETA'}</span>
