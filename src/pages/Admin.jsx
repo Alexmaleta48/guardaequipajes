@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import '../App.css';
-import { Backpack, Briefcase, Clock, Plus, Package, AlertTriangle, CreditCard, Banknote, RefreshCcw, Search, MessageCircle, Lock, LayoutDashboard, Camera, X } from 'lucide-react';
+import { Backpack, Briefcase, Clock, Plus, Package, AlertTriangle, CreditCard, Banknote, RefreshCcw, Search, MessageCircle, Lock, LayoutDashboard, Camera, X, LogOut } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
@@ -9,13 +9,13 @@ const PRICE_SMALL = 4;
 const PRICE_LARGE = 6;
 const HOURS_INCLUDED = 6;
 const EXTRA_HOUR_RATE = 0.50;
-const SECURITY_PIN = import.meta.env.VITE_MASTER_PIN || '1234';
 const MAX_SPACES = 40;
 
+// Ojo: Esto es una constante pero la seguridad REAL la valida el servidor de supabase y le da un Token jwt a la sesión, no pasa nada si lo lee alguien en código
+const ADMIN_EMAIL = 'alexmaletas48@gmail.com'; 
+
 function Admin() {
-  const [isAuthorized, setIsAuthorized] = useState(() => {
-    return localStorage.getItem('lockers_device_auth') === 'true';
-  });
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
   const [inventory, setInventory] = useState([]);
@@ -29,18 +29,28 @@ function Admin() {
   const [largeBags, setLargeBags] = useState(0);
   const [ticketId, setTicketId] = useState('');
   
-  // FOTO ANTI RECLAMACIONES
   const [photoData, setPhotoData] = useState(null);
   const fileInputRef = useRef(null);
   const [photoModal, setPhotoModal] = useState(null);
   
-  // MODAL HISTORIAL
   const [historyModal, setHistoryModal] = useState(false);
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [checkoutModal, setCheckoutModal] = useState(null);
   
+  // CONTROL DE SESIÓN SEGURA SUPABASE
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setIsAuthorized(true);
+    });
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthorized(!!session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(Date.now()), 60000);
     return () => clearInterval(interval);
@@ -50,11 +60,6 @@ function Admin() {
     if (!isAuthorized) return;
     setIsLoading(true);
     try {
-      if (!import.meta.env.VITE_SUPABASE_URL) {
-        toast.error("Falta url de Supabase (.env)");
-        setIsLoading(false); return;
-      }
-      
       const { data: activeLuggage, error: err1 } = await supabase.from('luggage').select('*').eq('status', 'active');
       if (err1) throw err1;
       
@@ -73,7 +78,7 @@ function Admin() {
       })));
     } catch (error) {
       console.error(error);
-      toast.error("Error cargando base de datos");
+      toast.error("Servidor rechaza conexión RLS");
     } finally {
       setIsLoading(false);
     }
@@ -99,16 +104,30 @@ function Admin() {
   }, [availableSpaces, ticketId]);
 
 
-  const handlePinSubmit = (e) => {
+  const handlePinSubmit = async (e) => {
     e.preventDefault();
-    if (pinInput === SECURITY_PIN) {
-      localStorage.setItem('lockers_device_auth', 'true');
-      setIsAuthorized(true);
-      toast.success("Dispositivo de trabajo validado", { icon: '🔐' });
-    } else {
-      toast.error("PIN Incorrecto");
-      setPinInput('');
+    if (!pinInput || pinInput.length < 6) {
+      toast.error("La contraseña debe tener mínimo 6 números/letras.");
+      return;
     }
+
+    toast.loading("Verificando firma con Servidor...", { id: 'auth' });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: ADMIN_EMAIL,
+      password: pinInput
+    });
+    
+    if (error) {
+      toast.error("Contraseña Incorrecta", { id: 'auth' });
+      setPinInput('');
+    } else {
+      toast.success("Búnker Abierto con Éxito", { id: 'auth', icon: '🛡️' });
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast("Módulo Cerrado", { icon: '🔒' });
   };
 
   const handlePhotoCapture = (e) => {
@@ -126,8 +145,7 @@ function Admin() {
         canvas.height = img.height * scaleSize;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        setPhotoData(dataUrl);
+        setPhotoData(canvas.toDataURL('image/jpeg', 0.6));
       };
       img.src = event.target.result;
     };
@@ -141,12 +159,10 @@ function Admin() {
   }
 
   const openWhatsApp = (phone, ticketStr, bagsCount, msgLang = 'en') => {
-    let text = '';
-    if (msgLang === 'es') {
-      text = `¡Hola! 👋 Tus ${bagsCount} bultos están a salvo en *Guardaequipajes Elche*.%0A%0A🔑 Tu Espacio Reservado es: *Nº ${ticketStr}*%0A%0ATienes 6 horas cerradas incluidas, luego suma 0.50€ por hora extra cada bulto. Consérvalo en pantalla. ¡Te esperamos! 😊`;
-    } else {
-       text = `Hello! 👋 Your ${bagsCount} bags are safe at *Luggage Storage Elche*.%0A%0A🔑 Your Reserved Space is: *Nº ${ticketStr}*%0A%0AYou have 6 fixed hours included. After that, it's just €0.50 per extra hour per bag. Show this message later. See you! 😊`;
-    }
+    let text = msgLang === 'es' 
+      ? `¡Hola! 👋 Tus ${bagsCount} bultos están a salvo en *Guardaequipajes Elche*.%0A%0A🔑 Tu Espacio Reservado es: *Nº ${ticketStr}*%0A%0ATienes 6 horas cerradas incluidas, luego suma 0.50€ por hora extra cada bulto. Consérvalo en pantalla. ¡Te esperamos! 😊`
+      : `Hello! 👋 Your ${bagsCount} bags are safe at *Luggage Storage Elche*.%0A%0A🔑 Your Reserved Space is: *Nº ${ticketStr}*%0A%0AYou have 6 fixed hours included. After that, it's just €0.50 per extra hour per bag. Show this message later. See you! 😊`;
+    
     const cleanPhone = phone.replace(/\D/g, ''); 
     const finalPhone = cleanPhone.length === 9 && cleanPhone.startsWith('6') ? `34${cleanPhone}` : cleanPhone;
     window.open(`https://wa.me/${finalPhone}?text=${text}`, '_blank');
@@ -155,24 +171,16 @@ function Admin() {
   const handleCheckIn = async (e) => {
     e.preventDefault();
     if (smallBags === 0 && largeBags === 0) return;
-    if (!ticketId) {
-      toast.error("El local está lleno (40/40).");
-      return;
-    }
-    
-    if (inventory.some(i => i.ticketId === ticketId)) {
-      toast.error(`El espacio ${ticketId} ya está ocupado.`);
-      return;
+    if (!ticketId || inventory.some(i => i.ticketId === ticketId)) {
+      toast.error(`Espacio Invalido o Lleno (40/40)`); return;
     }
 
     const id = ticketId;
     const newName = clientName || `Turista ${id}`;
-    
     const tempItem = { id: "temp-" + Date.now(), ticketId: id, clientName: newName, clientPhone, photoData, waLang, smallBags, largeBags, checkInTime: Date.now(), status: 'active' };
     
     setInventory([tempItem, ...inventory]);
     setClientName(''); setClientPhone(''); setSmallBags(0); setLargeBags(0); setPhotoData(null);
-    
     toast.loading(`Ocupando estantería #${id}...`, { id: 'save' });
 
     try {
@@ -180,26 +188,23 @@ function Admin() {
       if (error) throw error;
       
       setInventory(prev => prev.map(item => item.id === tempItem.id ? { ...tempItem, id: data[0].id } : item));
-      toast.success(`¡Espacio ${id} Asignado!`, { id: 'save' });
+      toast.success(`¡Espacio ${id} Asignado y Subido!`, { id: 'save' });
 
       if (tempItem.clientPhone.trim().length > 5) {
         toast((t) => (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span>Enviar billete digital ({tempItem.waLang === 'en' ? 'Inglés' : 'Español'})</span>
+            <span>Enviar billete virtual ({tempItem.waLang === 'en' ? 'Inglés' : 'Español'})</span>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
               <button className="btn-success" style={{ padding: '6px 12px', borderRadius: '4px', border:'none', color:'white', cursor:'pointer' }} onClick={() => {
-                toast.dismiss(t.id);
-                openWhatsApp(tempItem.clientPhone, tempItem.ticketId, tempItem.smallBags + tempItem.largeBags, tempItem.waLang);
+                toast.dismiss(t.id); openWhatsApp(tempItem.clientPhone, tempItem.ticketId, tempItem.smallBags + tempItem.largeBags, tempItem.waLang);
               }}>WhatsApp</button>
-              <button style={{ background: '#eee', padding: '6px 12px', borderRadius: '4px', border:'none', cursor:'pointer' }} onClick={() => toast.dismiss(t.id)}>Omitir</button>
+              <button style={{ background: '#eee', padding: '6px 12px', borderRadius: '4px', border:'none', cursor:'pointer' }} onClick={() => toast.dismiss(t.id)}>Saltar</button>
             </div>
           </div>
         ), { duration: 15000 });
       }
-
     } catch (error) {
-       console.error(error);
-       toast.error("Guardado en local por fallo de red.", { id: 'save' });
+       console.error(error); toast.error("Guardado local únicamente por error DB.", { id: 'save' });
     }
   };
 
@@ -207,24 +212,16 @@ function Admin() {
     const diffMs = currentTime - checkInTime;
     const diffHours = diffMs / (1000 * 60 * 60);
     const diffMinsTotal = Math.floor(diffMs / (1000 * 60));
-    const displayHours = Math.floor(diffMinsTotal / 60);
-    const displayMins = diffMinsTotal % 60;
     const isWarning = diffHours >= (HOURS_INCLUDED - 1) && diffHours < HOURS_INCLUDED;
     const isDanger = diffHours >= HOURS_INCLUDED;
-    const formatted = `${displayHours > 0 ? displayHours + 'h ' : ''}${displayMins}m`;
+    const formatted = `${Math.floor(diffMinsTotal / 60) > 0 ? Math.floor(diffMinsTotal / 60) + 'h ' : ''}${diffMinsTotal % 60}m`;
     return { diffHours, formatted, isWarning, isDanger };
   };
 
   const calculatePrice = (item) => {
     const { diffHours } = calculateTimeInfo(item.checkInTime);
     const basePrice = (item.smallBags * PRICE_SMALL) + (item.largeBags * PRICE_LARGE);
-    
-    let extraHoursFees = 0;
-    if (diffHours > HOURS_INCLUDED) {
-      const extraHrs = Math.ceil(diffHours - HOURS_INCLUDED);
-      const totalPieces = item.smallBags + item.largeBags;
-      extraHoursFees = extraHrs * totalPieces * EXTRA_HOUR_RATE;
-    }
+    let extraHoursFees = diffHours > HOURS_INCLUDED ? Math.ceil(diffHours - HOURS_INCLUDED) * (item.smallBags + item.largeBags) * EXTRA_HOUR_RATE : 0;
     return { basePrice, extraHoursFees, totalPrice: basePrice + extraHoursFees, extraHours: diffHours > HOURS_INCLUDED ? Math.ceil(diffHours - HOURS_INCLUDED) : 0 };
   };
 
@@ -241,15 +238,12 @@ function Admin() {
 
     try {
        if (!item.id.toString().startsWith("temp-")) {
-          const { error } = await supabase.from('luggage').update({ 
-              status: 'completed', check_out_time: new Date().toISOString(), total_paid: totalPrice, payment_method: paymentMethod
-          }).eq('id', item.id);
+          const { error } = await supabase.from('luggage').update({ status: 'completed', check_out_time: new Date().toISOString(), total_paid: totalPrice, payment_method: paymentMethod }).eq('id', item.id);
           if (error) throw error;
        }
-       toast.success(`Estante #${item.ticketId} cobrado y libre`, { id: 'pay' });
+       toast.success(`Estante #${item.ticketId} cobrado de forma remota`, { id: 'pay' });
     } catch(err) {
-       console.error(err);
-       toast.error("Error sincronizando cobro", { id: 'pay' });
+       console.error(err); toast.error("Error sincronizando cobro", { id: 'pay' });
     }
   };
 
@@ -262,7 +256,7 @@ function Admin() {
       }
       toast.success(`Pago cambiado a ${newMethod === 'cash' ? 'Metálico' : 'Tarjeta'}`);
     } catch(err) {
-      toast.error("Error corrigiendo en banco de datos.");
+      toast.error("Error corrigiendo en DB. Token obsoleto.");
     }
   };
 
@@ -278,22 +272,22 @@ function Admin() {
     return (
       <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
         <Toaster />
-        <div className="glass-panel" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+        <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
           <Lock size={48} color="var(--accent-color)" style={{ margin: '0 auto 1rem' }} />
-          <h2 style={{ marginBottom: '1.5rem' }}>Mostrador Bloqueado</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-            Pantalla privada para la gestión del local de Elche. Ponga el PIN para validar dispositivo.
+          <h2 style={{ marginBottom: '1.5rem', color: '#0f172a' }}>Acceso Restringido</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            Cuenta vinculada: <span style={{fontWeight:'bold'}}>{ADMIN_EMAIL}</span>
           </p>
           <form onSubmit={handlePinSubmit}>
             <input 
-              type="password" className="form-input" placeholder="****" 
-              style={{ textAlign: 'center', fontSize: '2rem', letterSpacing: '0.5rem', marginBottom: '1rem' }}
+              type="password" className="form-input" placeholder="Contraseña Maestra Supabase..." 
+              style={{ textAlign: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}
               value={pinInput} onChange={e => setPinInput(e.target.value)} autoFocus
             />
-            <button className="btn btn-primary" type="submit">Desbloquear Mostrador</button>
+            <button className="btn btn-primary" type="submit">Iniciar Sesión Segura</button>
           </form>
-          <div style={{ marginTop: '2rem' }}>
-             <Link to="/" style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>&larr; Volver a web Turistas</Link>
+          <div style={{ marginTop: '2.5rem' }}>
+             <Link to="/" style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>&larr; Visitar el Escaparate Turista</Link>
           </div>
         </div>
       </div>
@@ -310,7 +304,6 @@ function Admin() {
     <div className="app-container" style={{maxWidth: '1400px'}}>
       <Toaster position="top-center" />
       
-      {/* PHOTO PREVIEW MODAL */}
       {photoModal && (
         <div className="modal-overlay animate-fade-in" onClick={() => setPhotoModal(null)} style={{ zIndex: 9999 }}>
           <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
@@ -326,15 +319,19 @@ function Admin() {
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
            <h1>
              <LayoutDashboard className="text-accent" color="var(--accent-color)" size={32} />
-             Mostrador · Lockers
+             Mostrador Seguro
            </h1>
-           <button onClick={fetchData} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%' }} title="Sincronizar">
+           <button onClick={fetchData} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%' }} title="Sincronizar Datos">
              <RefreshCcw size={16} className={isLoading ? "animate-spin" : ""} />
+           </button>
+           {/* BOTON DE LOGOUT MILITAR */}
+           <button onClick={handleLogout} className="btn-outline" style={{ padding: '0.4rem', borderRadius: '50%', color: 'var(--danger)', borderColor: 'var(--danger-light)' }} title="Cerrar Búnker Supabase">
+             <LogOut size={16} />
            </button>
         </div>
         <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
-          <Link to="/" className="btn-outline" style={{color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500, padding:'0.5rem 1rem'}}>🏠 Público</Link>
-          <div className="ticket-tag" style={{ fontSize: '1rem', padding: '0.5rem 1rem', display: 'none' /* oculto en movil */ }}>
+          <Link to="/" className="btn-outline" style={{color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500, padding:'0.5rem 1rem'}}>🏠 Web Pública</Link>
+          <div className="ticket-tag" style={{ fontSize: '1rem', padding: '0.5rem 1rem', display: 'none' }}>
             {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
         </div>
@@ -356,7 +353,7 @@ function Admin() {
         <div className="stat-card">
           <div className="stat-title">Clientela Atendida Hoy</div>
           <div className="stat-value">{todaysHistory.length} turistas</div>
-          <div className="stat-trend">Cuentan a su salida oficial</div>
+          <div className="stat-trend">Verificados desde Base de Datos</div>
         </div>
         <div className="stat-card" style={{borderColor: availableSpaces.length === 0 ? 'var(--danger)' : 'var(--accent-color)'}}>
           <div className="stat-title">Ocupación Física Tienda</div>
@@ -364,7 +361,7 @@ function Admin() {
             {MAX_SPACES - availableSpaces.length} / {MAX_SPACES}
           </div>
           <div className="stat-trend" style={{ color: availableSpaces.length === 0 ? 'var(--danger)' : 'var(--accent-color)', fontWeight: 'bold' }}>
-            {availableSpaces.length === 0 ? '¡TIENDA LLENA!' : `Quedan ${availableSpaces.length} estanterías libres`}
+            {availableSpaces.length === 0 ? '¡TIENDA LLENA!' : `Quedan ${availableSpaces.length} vacías`}
           </div>
         </div>
       </section>
@@ -375,12 +372,10 @@ function Admin() {
         <section className="glass-panel animate-fade-in" style={{ animationDelay: '0.2s', alignSelf: 'start', padding: '2rem' }}>
           <h2 className="panel-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'1rem'}}>
              <div><Plus size={24} /> Nueva Maleta</div>
-             
              <div style={{position: 'relative'}}>
                 <input 
                   type="file" accept="image/*" capture="environment" 
-                  ref={fileInputRef} onChange={handlePhotoCapture}
-                  style={{display: 'none'}} id="camera-upload"
+                  ref={fileInputRef} onChange={handlePhotoCapture} style={{display: 'none'}} id="camera-upload"
                 />
                 {!photoData ? (
                   <label htmlFor="camera-upload" title="Fotos Anti-Robo de Maletas" style={{display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f1f5f9', color: '#64748b', padding: '0.4rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer', border: '1px solid #cbd5e1'}}>
@@ -399,7 +394,7 @@ function Admin() {
           <form onSubmit={handleCheckIn}>
             <div className="form-group form-row">
               <div>
-                <label className="form-label">Estantería a Asignar</label>
+                <label className="form-label">Maletero Destino</label>
                 <select 
                   className="form-input" 
                   style={{ background: '#f8fafc', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)', cursor: 'pointer' }}
@@ -410,7 +405,7 @@ function Admin() {
                 </select>
               </div>
               <div>
-                <label className="form-label">Nombre Opcional</label>
+                <label className="form-label">Nombre (Opcional)</label>
                 <input type="text" className="form-input" placeholder="Turista..." value={clientName} onChange={e => setClientName(e.target.value)} disabled={availableSpaces.length === 0} />
               </div>
             </div>
@@ -418,9 +413,9 @@ function Admin() {
             <div className="form-group" style={{border: '1px solid #e2e8f0', padding: '1rem', borderRadius:'8px', background: '#fafafa', opacity: availableSpaces.length === 0 ? 0.5 : 1}}>
               <label className="form-label" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <MessageCircle size={18} color="#25D366" /> 
-                WhatsApp para Enviar Localizador
+                WhatsApp para Enviar Alerta
               </label>
-              <input type="tel" className="form-input" placeholder="Ej: 600 12 34 56" value={clientPhone} onChange={e => setClientPhone(e.target.value)} style={{marginBottom: '0.5rem'}} disabled={availableSpaces.length === 0} />
+              <input type="tel" className="form-input" placeholder="Ej: +34 600 12 34 56" value={clientPhone} onChange={e => setClientPhone(e.target.value)} style={{marginBottom: '0.5rem'}} disabled={availableSpaces.length === 0} />
               
               <div style={{display:'flex', gap: '0.5rem', marginTop: '0.5rem'}}>
                  <div style={{flex:1, textAlign:'center', fontSize:'0.8rem', padding:'0.4rem', border: waLang==='en'?'2px solid var(--accent-color)':'1px solid #ccc', borderRadius:'4px', cursor:'pointer', background: waLang==='en'?'var(--accent-light)':'#fff', fontWeight: waLang==='en'?700:400}} onClick={()=>setWaLang('en')}>🇬🇧 Inglés</div>
@@ -431,7 +426,7 @@ function Admin() {
             <label className="form-label" style={{ marginTop: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Cantidad de Bultos</label>
             <div className="counter-group">
               <div className="counter-info">
-                <span className="counter-title">Mochilas Pequeñas</span>
+                <span className="counter-title">Mochilas / Standard</span>
                 <span className="counter-subtitle">{PRICE_SMALL} € / 6h y +0.50€ extras/h</span>
               </div>
               <div className="counter-controls">
@@ -443,7 +438,7 @@ function Admin() {
 
             <div className="counter-group">
               <div className="counter-info">
-                <span className="counter-title">Maletas Grandes</span>
+                <span className="counter-title">Maletas Gigantes</span>
                 <span className="counter-subtitle">{PRICE_LARGE} € / 6h y +0.50€ extras/h</span>
               </div>
               <div className="counter-controls">
@@ -462,11 +457,11 @@ function Admin() {
         {/* ACTIVE DASHBOARD */}
         <section className="glass-panel animate-fade-in" style={{ animationDelay: '0.3s' }}>
           <div className="header" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <h2 className="panel-title" style={{ margin: 0 }}><Clock size={24} /> Tráfico Vivo (Local)</h2>
+            <h2 className="panel-title" style={{ margin: 0 }}><Clock size={24} /> Tráfico Local</h2>
             <div style={{ position: 'relative', flex: '1', minWidth: '300px' }}>
               <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
               <input 
-                type="text" className="form-input" placeholder="Busca por estantería o nombre..." 
+                type="text" className="form-input" placeholder="Busca por Nombre o Número..." 
                 style={{ paddingLeft: '2.5rem', borderRadius: '2rem', height: '100%', border: '2px solid #e2e8f0' }}
                 value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               />
@@ -474,11 +469,11 @@ function Admin() {
           </div>
 
           {isLoading && inventory.length === 0 ? (
-             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>Cargando ocupación en tiempo real...</div>
+             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>Cargando ocupación Segura...</div>
           ) : filteredInventory.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
               <Package size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
-              <p>{inventory.length === 0 ? "Todo el local está vacío. Esperando reservas." : "No hay maletas que coincidan."}</p>
+              <p>{inventory.length === 0 ? "Local vacío de momento." : "Búsqueda sin resultados."}</p>
             </div>
           ) : (
             <div className="dashboard-grid">
@@ -501,12 +496,12 @@ function Admin() {
                        
                        <div style={{marginLeft:'auto', display:'flex', gap:'0.5rem'}}>
                           {item.photoData && (
-                            <button onClick={() => setPhotoModal(item.photoData)} title="Ver Foto Anti-Reclamación" style={{color: '#6366f1', background:'none', border:'none', cursor:'pointer', padding: 0}}>
+                            <button onClick={() => setPhotoModal(item.photoData)} title="Ver Foto" style={{color: '#6366f1', background:'none', border:'none', cursor:'pointer', padding: 0}}>
                               <Camera size={20} />
                             </button>
                           )}
                           {item.clientPhone && (
-                            <button onClick={() => openWhatsApp(item.clientPhone, item.ticketId, item.smallBags + item.largeBags, item.waLang || 'en')} title="Reenviar WhatsApp" style={{color: '#25D366', background:'none', border:'none', cursor:'pointer', padding: 0}}>
+                            <button onClick={() => openWhatsApp(item.clientPhone, item.ticketId, item.smallBags + item.largeBags, item.waLang || 'en')} title="Alertar Turista" style={{color: '#25D366', background:'none', border:'none', cursor:'pointer', padding: 0}}>
                               <MessageCircle size={20} />
                             </button>
                           )}
@@ -514,20 +509,16 @@ function Admin() {
                     </div>
                     
                     <div className="card-items">
-                      {item.smallBags > 0 && (
-                        <div className="item-badge"><Backpack size={16} /> x{item.smallBags} Mochila</div>
-                      )}
-                      {item.largeBags > 0 && (
-                        <div className="item-badge"><Briefcase size={16} /> x{item.largeBags} Grande</div>
-                      )}
+                      {item.smallBags > 0 && (<div className="item-badge"><Backpack size={16} /> x{item.smallBags} Chica</div>)}
+                      {item.largeBags > 0 && (<div className="item-badge"><Briefcase size={16} /> x{item.largeBags} Grand</div>)}
                     </div>
                     
                     <div className="card-footer" style={{ borderTop: 'none', paddingTop: 0 }}>
-                      <div>{isDanger && <span className="extra-fee">Penalización (+6h)</span>}</div>
+                      <div>{isDanger && <span className="extra-fee">+6h (Añadido recargo)</span>}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div className="estimated-price">{totalPrice.toFixed(2)} €</div>
                         <button className="btn btn-primary" style={{ padding: '0.6rem 1rem', width: 'auto' }} onClick={() => setCheckoutModal(item)}>
-                          Salida y Pago
+                          Desocupar
                         </button>
                       </div>
                     </div>
@@ -543,41 +534,29 @@ function Admin() {
         <div className="modal-overlay animate-fade-in" onClick={() => setCheckoutModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="modal-title">Cobro (Salida)</h2>
-              <div className="ticket-tag" style={{background: 'var(--text-primary)', color: 'white'}}>Nº {checkoutModal.ticketId}</div>
+              <h2 className="modal-title">Caja Tickets (Salida)</h2>
+              <div className="ticket-tag" style={{background: 'var(--text-primary)', color: 'white'}}>Estante Nº {checkoutModal.ticketId}</div>
             </div>
             
             <div className="price-breakdown">
-              <div className="breakdown-row">
-                <span>{checkoutModal.smallBags}x Mochila [4€ base]</span>
-                <span>{(checkoutModal.smallBags * PRICE_SMALL).toFixed(2)} €</span>
-              </div>
-              <div className="breakdown-row">
-                <span>{checkoutModal.largeBags}x Grande [6€ base]</span>
-                <span>{(checkoutModal.largeBags * PRICE_LARGE).toFixed(2)} €</span>
-              </div>
+              <div className="breakdown-row"><span>{checkoutModal.smallBags}x Mochila o similar [4€ base]</span><span>{(checkoutModal.smallBags * PRICE_SMALL).toFixed(2)} €</span></div>
+              <div className="breakdown-row"><span>{checkoutModal.largeBags}x Especial Pesada [6€ base]</span><span>{(checkoutModal.largeBags * PRICE_LARGE).toFixed(2)} €</span></div>
               {calculatePrice(checkoutModal).extraHours > 0 && (
-              <div className="breakdown-row" style={{ color: 'var(--danger)', fontWeight: 500 }}>
-                <span>Plus (+{calculatePrice(checkoutModal).extraHours}h extra)</span>
-                <span>{(calculatePrice(checkoutModal).extraHoursFees).toFixed(2)} €</span>
-              </div>
+              <div className="breakdown-row" style={{ color: 'var(--danger)', fontWeight: 500 }}><span>Penalización por +{calculatePrice(checkoutModal).extraHours}h extra</span><span>{(calculatePrice(checkoutModal).extraHoursFees).toFixed(2)} €</span></div>
               )}
-              <div className="breakdown-row total">
-                <span>Total a Cobrar</span>
-                <span style={{color: 'var(--accent-color)', fontSize: '2rem'}}>{calculatePrice(checkoutModal).totalPrice.toFixed(2)} €</span>
-              </div>
+              <div className="breakdown-row total"><span>Importe Total</span><span style={{color: 'var(--accent-color)', fontSize: '2rem'}}>{calculatePrice(checkoutModal).totalPrice.toFixed(2)} €</span></div>
             </div>
             
             <div style={{ marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-              Pulsando estos botones darás por cerrado el cobro.
+              Dale salida para que tu DB deje el cajón como Libre para el sistema.
             </div>
             
             <div className="modal-actions">
               <button className="btn" style={{ backgroundColor: '#22c55e', color: 'white' }} onClick={() => confirmCheckout('cash')}>
-                <Banknote size={20} /> Metálico / Efectivo
+                <Banknote size={20} /> Metálico / En mano
               </button>
               <button className="btn btn-primary" onClick={() => confirmCheckout('card')}>
-                <CreditCard size={20} /> Datáfono Tarjeta
+                <CreditCard size={20} /> TPV / Datáfono
               </button>
             </div>
           </div>
@@ -589,14 +568,14 @@ function Admin() {
         <div className="modal-overlay animate-fade-in" onClick={() => setHistoryModal(false)} style={{ zIndex: 1000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 className="modal-title" style={{ margin: 0 }}>Historial de Ventas Hoy</h2>
+              <h2 className="modal-title" style={{ margin: 0 }}>Arqueo de Ventas Diario</h2>
               <button onClick={() => setHistoryModal(false)} style={{ background: '#f1f5f9', padding: '0.5rem', borderRadius: '50%', color: 'var(--text-secondary)' }}>
                 <X size={20} />
               </button>
             </div>
             
             {todaysHistory.length === 0 ? (
-              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0' }}>Aún no hay caja hoy.</p>
+              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0' }}>El negocio no ha ingresado hoy todavía.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {todaysHistory.map(item => (
@@ -604,7 +583,7 @@ function Admin() {
                     <div>
                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="ticket-tag" style={{ fontSize: '0.8rem', padding: '0.2rem 0.4rem' }}>{item.ticketId}</span>
-                        {item.clientName || 'Turista'}
+                        {item.clientName || 'Turista Anónimo'}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                         Cobrado a las {new Date(item.checkOutTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
@@ -613,9 +592,8 @@ function Admin() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       <div style={{ fontSize: '1.2rem', fontWeight: 700, minWidth: '60px', textAlign: 'right' }}>{item.totalPaid.toFixed(2)}€</div>
                       <button 
-                        onClick={() => togglePaymentMethod(item)}
-                        title="Clic para corregir método de pago si te equivocaste"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', background: 'white', color: 'var(--text-primary)', cursor: 'pointer', width: '95px', justifyContent: 'center' }}
+                        onClick={() => togglePaymentMethod(item)} title="Auditoría: Cambiar si te equivocaste en la caja"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', background: 'white', color: 'var(--text-primary)', cursor: 'pointer', width: '95px', justifyContent: 'center', transition: '0.2s' }}
                       >
                         {item.paymentMethod === 'cash' ? <Banknote size={16} color="#10b981" /> : <CreditCard size={16} color="var(--accent-color)" />}
                         <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{item.paymentMethod === 'cash' ? 'EFECTIVO' : 'TARJETA'}</span>
