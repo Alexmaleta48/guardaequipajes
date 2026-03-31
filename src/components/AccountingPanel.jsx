@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { Calculator, Download, Plus, Minus, FileText, Lock, Banknote, CreditCard, CheckCircle } from 'lucide-react';
+import { Calculator, Download, Plus, Minus, FileText, Lock, Banknote, CreditCard, CheckCircle, RefreshCw } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function AccountingPanel({ isDark, totalCashToday, totalCardToday }) {
   const [shift, setShift] = useState(null);
@@ -14,6 +15,7 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseReason, setExpenseReason] = useState('');
   const [physicalCashCounter, setPhysicalCashCounter] = useState('');
+  const [exportPeriod, setExportPeriod] = useState('month'); // 'today' | 'week' | 'month' | 'all'
 
   const getLocalDate = () => {
     const tzOffset = (new Date()).getTimezoneOffset() * 60000;
@@ -111,39 +113,93 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
     }
   };
 
-  // EXPORTACIONES A CSV PARA EL ASESOR FISCAL (Excel)
-  const downloadCSV = (content, filename) => {
-    const blob = new Blob(["\uFEFF" + content], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const reopenShift = async () => {
+    toast.loading("Reabriendo Turno...", { id: 'close' });
+    const { error } = await supabase.from('daily_shifts').update({
+       closed_at: null,
+       final_cash_counted: 0,
+       final_card_calculated: 0,
+       final_cash_calculated: 0,
+       difference: 0,
+       notes: null
+    }).eq('date_opened', todayDate);
+
+    if (!error) {
+      setShift({ ...shift, closed_at: null, final_cash_counted: 0, difference: 0 });
+      setPhysicalCashCounter('');
+      toast.success("Caja reabierta. Ya puedes seguir vendiendo.", { id: 'close' });
+    } else {
+      toast.error("Error al intentar reabrir turno.", { id: 'close' });
+    }
   };
 
-  const exportShiftsCSV = () => {
-     let csv = "Fecha de Caja,Fondo Inicial,Ventas Tarjeta TPV,Ventas Efectivo,Gastos Anotados,Cálculo Final Informático,Dinero Contado Cierre,Descuadre,Notas\n";
-     const allShifts = shift ? [shift, ...historyShifts] : historyShifts;
-     allShifts.forEach(s => {
-        csv += `${s.date_opened},${s.initial_cash},${s.final_card_calculated},${s.final_cash_calculated},${s.total_expenses},${s.final_cash_calculated},${s.final_cash_counted},${s.difference},"${s.notes || ''}"\n`;
-     });
-     downloadCSV(csv, `Cierres_Caja_${todayDate}.csv`);
-  };
-
-  const exportTicketsCSV = async () => {
-    toast.loading("Recopilando facturas...", { id: 'export' });
-    const { data } = await supabase.from('luggage').select('*').eq('status', 'completed').order('check_out_time', { ascending: false });
-    if (!data) { toast.error("Error descargando", { id: 'export' }); return; }
-    
-    let csv = "Ticket ID,Fecha Ingreso,Fecha Cobro,Cliente,Bultos Pequeños,Bultos Grandes,Total Cobrado (€),Método de Pago\n";
-    data.forEach(d => {
-       csv += `"${d.ticket_id}","${new Date(d.check_in_time).toLocaleString('es-ES')}","${new Date(d.check_out_time).toLocaleString('es-ES')}","${d.client_name || 'Anónimo'}",${d.small_bags},${d.large_bags},${d.total_paid},${d.payment_method === 'cash' ? 'Efectivo' : 'Tarjeta'}\n`;
+  // EXPORTACIONES NATIVAS A EXCEL (.xlsx)
+  const getFilteredData = (dataArray, dateField) => {
+    if (exportPeriod === 'all') return dataArray;
+    const now = new Date();
+    return dataArray.filter(item => {
+      const itemDate = new Date(item[dateField]);
+      if (exportPeriod === 'today') return itemDate.toDateString() === now.toDateString();
+      if (exportPeriod === 'week') {
+        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return itemDate >= lastWeek;
+      }
+      if (exportPeriod === 'month') {
+        return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+      }
+      return true;
     });
-    toast.success("CSV Generado con éxito", { id: 'export' });
-    downloadCSV(csv, `Todos_Los_Tickets_${todayDate}.csv`);
+  };
+
+  const exportShiftsExcel = () => {
+     let allShifts = shift ? [shift, ...historyShifts] : historyShifts;
+     allShifts = getFilteredData(allShifts, 'date_opened');
+     
+     if(allShifts.length === 0){ toast.error("No hay cierres en el rango seleccionado"); return; }
+     
+     const exportData = allShifts.map(s => ({
+       'Fecha Contable': s.date_opened,
+       'Fondo Inicial (€)': Number(s.initial_cash),
+       'Ventas TPV Tarjeta (€)': Number(s.final_card_calculated),
+       'Ventas Metálico (€)': Number(s.final_cash_calculated),
+       'Gastos Anotados (€)': Number(s.total_expenses),
+       'Cálculo Informático (€)': Number(s.final_cash_calculated),
+       'Dinero Contado Físico (€)': Number(s.final_cash_counted),
+       'Descuadre (€)': Number(s.difference),
+       'Notas Adicionales': s.notes || ''
+     }));
+
+     const worksheet = XLSX.utils.json_to_sheet(exportData);
+     const workbook = XLSX.utils.book_new();
+     XLSX.utils.book_append_sheet(workbook, worksheet, "Arqueos Diarios");
+     XLSX.writeFile(workbook, `Arqueos_Lockers_${exportPeriod}_${todayDate}.xlsx`);
+     toast.success("Excel Descargado", {icon: '📗'});
+  };
+
+  const exportTicketsExcel = async () => {
+    toast.loading("Generando Excel de Tickets...", { id: 'export' });
+    const { data } = await supabase.from('luggage').select('*').eq('status', 'completed').order('check_out_time', { ascending: false });
+    if (!data) { toast.error("Error descargando BD", { id: 'export' }); return; }
+    
+    let filteredData = getFilteredData(data, 'check_out_time');
+    if(filteredData.length === 0){ toast.error("No hay tickets cobrados en este rango", { id: 'export' }); return; }
+    
+    const exportData = filteredData.map(d => ({
+       'ID Ticket': d.ticket_id,
+       'Fecha y Hora Ingreso': new Date(d.check_in_time).toLocaleString('es-ES'),
+       'Fecha y Hora Cobro': new Date(d.check_out_time).toLocaleString('es-ES'),
+       'Identidad Cliente': d.client_name || 'Anónimo',
+       'Bultos Pequeños (Unid)': d.small_bags,
+       'Bultos Gigantes (Unid)': d.large_bags,
+       'Método de Pago Final': d.payment_method === 'cash' ? 'Efectivo' : 'Tarjeta (TPV)',
+       'Importe Total (€)': Number(d.total_paid)
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Trazabilidad Tickets");
+    XLSX.writeFile(workbook, `Facturas_Lockers_${exportPeriod}_${todayDate}.xlsx`);
+    toast.success("Listado Completo Descargado en Excel", { id: 'export', icon: '📃' });
   };
 
   if (loading) return <div style={{textAlign: 'center', padding: '4rem'}}>Sincronizando caja fuerte...</div>;
@@ -196,17 +252,23 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
         <div style={{ borderTop: '2px dashed var(--border-color)', paddingTop: '1.5rem' }}>
            <h3 style={{ fontSize: '1rem', marginBottom: '1rem' }}><CheckCircle size={16} style={{display:'inline'}} /> Arqueo Ciego Final</h3>
            <p style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem'}}>
-             Cuenta el dinero en billetes y monedas que tienes dentro del cajón ahora mismo sin mirar y escríbelo aquí para comprobar si cuadra matemáticamente:
+             Cuenta el dinero físico que hay en el cajón y escríbelo para que el sistema compruebe si sobra o falta respecto a las ventas:
            </p>
            <input type="number" step="0.01" className="form-input" style={{fontSize: '1.5rem', textAlign: 'center', marginBottom:'1rem', background: isClosed ? 'var(--bg-color)' : 'var(--surface-color)'}} placeholder="0.00 €" value={isClosed ? (shift.final_cash_counted || 0).toFixed(2) : physicalCashCounter} onChange={e => setPhysicalCashCounter(e.target.value)} disabled={isClosed} />
            
            {!isClosed ? (
              <button onClick={closeShift} className="btn btn-primary" style={{ background: '#10b981', width: '100%' }}>Bloquear y Cerrar Turno</button>
            ) : (
-             <div style={{ textAlign: 'center', padding: '1rem', background: shift.difference === 0 ? 'var(--success-light)' : 'var(--danger-light)', borderRadius: '8px', color: shift.difference === 0 ? '#065f46' : '#7f1d1d', fontWeight: 'bold' }}>
-               {shift.difference === 0 ? '¡CAJA CUADRADA A 0.00€!' : `DESCUADRE DE ${shift.difference > 0 ? '+' : ''}${shift.difference.toFixed(2)}€`}
-               <div style={{fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.8}}>Ventas TPV Registradas: {totalCardToday.toFixed(2)}€</div>
-             </div>
+             <>
+               <div style={{ textAlign: 'center', padding: '1rem', background: shift.difference === 0 ? 'var(--success-light)' : 'var(--danger-light)', borderRadius: '8px', color: shift.difference === 0 ? '#065f46' : '#7f1d1d', fontWeight: 'bold' }}>
+                 {shift.difference === 0 ? '¡CAJA CUADRADA A 0.00€!' : `DESCUADRE DE ${shift.difference > 0 ? '+' : ''}${shift.difference.toFixed(2)}€`}
+                 <div style={{fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.8}}>Ventas TPV Registradas: {totalCardToday.toFixed(2)}€</div>
+               </div>
+               
+               <button onClick={reopenShift} className="btn-outline" style={{ width: '100%', marginTop: '1rem', color: 'var(--warning)', borderColor: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap:'0.5rem' }}>
+                 <RefreshCw size={16} /> Reabrir Caja por Error
+               </button>
+             </>
            )}
         </div>
       </section>
@@ -215,11 +277,19 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
       <section className="glass-panel animate-fade-in" style={{ animationDelay: '0.2s', padding: '2rem' }}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '2rem', flexWrap:'wrap', gap:'1rem'}}>
           <h2 className="panel-title" style={{margin:0}}>
-             <Download size={24}/> Exportación para Gestoría
+             <Download size={24}/> Exportación para Gestor (.xlsx)
           </h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-             <button className="btn-outline" onClick={exportShiftsCSV} style={{padding: '0.5rem 1rem', fontSize:'0.85rem', display:'flex', alignItems:'center', gap:'0.5rem', color:'var(--text-primary)'}}><FileText size={16}/> Todos los Cierres (Días)</button>
-             <button className="btn-outline" onClick={exportTicketsCSV} style={{padding: '0.5rem 1rem', fontSize:'0.85rem', display:'flex', alignItems:'center', gap:'0.5rem', color:'var(--text-primary)'}}><FileText size={16}/> Todos los Tickets (Individual)</button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+             
+             <select className="form-input" style={{padding: '0.4rem', width: 'auto'}} value={exportPeriod} onChange={e => setExportPeriod(e.target.value)}>
+                <option value="today">Solo Hoy</option>
+                <option value="week">Últimos 7 Días</option>
+                <option value="month">Este Mes</option>
+                <option value="all">Todo el Histórico</option>
+             </select>
+
+             <button className="btn-outline" onClick={exportShiftsExcel} style={{padding: '0.5rem 1rem', fontSize:'0.85rem', display:'flex', alignItems:'center', gap:'0.5rem', color:'var(--success)', borderColor: 'var(--success)'}}><FileText size={16}/> Resumen Cierres</button>
+             <button className="btn-outline" onClick={exportTicketsExcel} style={{padding: '0.5rem 1rem', fontSize:'0.85rem', display:'flex', alignItems:'center', gap:'0.5rem', color:'var(--accent-color)', borderColor: 'var(--accent-color)'}}><FileText size={16}/> Todos los Tickets</button>
           </div>
         </div>
 
@@ -238,7 +308,7 @@ export default function AccountingPanel({ isDark, totalCashToday, totalCardToday
                <thead>
                  <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                    <th style={{padding:'0.5rem'}}>Fecha</th>
-                   <th style={{padding:'0.5rem'}}>Base Recaudada TPV</th>
+                   <th style={{padding:'0.5rem'}}>Ventas Tarjeta TPV</th>
                    <th style={{padding:'0.5rem'}}>Ingreso Efectivo Total</th>
                    <th style={{padding:'0.5rem'}}>Cuadre Final</th>
                  </tr>
